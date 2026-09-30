@@ -1,0 +1,141 @@
+import json
+import os
+from datetime import datetime
+from typing import Dict, Any, List
+
+DB_FILE = "bot_database.json"
+
+DEFAULT_DB = {
+    "users": {},
+    "admins": [],
+    "banned": [],
+    "bot_enabled": True,
+    "stats": {
+        "total_users": 0,
+        "total_decrypts": 0,
+        "decrypts_by_type": {}
+    }
+}
+
+
+def load_db() -> Dict[str, Any]:
+    if not os.path.exists(DB_FILE):
+        save_db(DEFAULT_DB)
+        return json.loads(json.dumps(DEFAULT_DB))
+    try:
+        with open(DB_FILE, "r", encoding="utf-8") as f:
+            db = json.load(f)
+        for k, v in DEFAULT_DB.items():
+            if k not in db:
+                db[k] = v
+        return db
+    except Exception:
+        return json.loads(json.dumps(DEFAULT_DB))
+
+
+def save_db(db: Dict[str, Any]) -> None:
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=4, ensure_ascii=False)
+
+
+def register_user(user_id: int, username: str = "", first_name: str = "") -> bool:
+    db = load_db()
+    uid = str(user_id)
+    is_new = uid not in db["users"]
+    if is_new:
+        db["users"][uid] = {
+            "username": username or "",
+            "first_name": first_name or "",
+            "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "is_banned": False
+        }
+    else:
+        if username:
+            db["users"][uid]["username"] = username
+        if first_name:
+            db["users"][uid]["first_name"] = first_name
+    db["stats"]["total_users"] = len(db["users"])
+    save_db(db)
+    return is_new
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id in load_db()["admins"]
+
+
+def add_admin(user_id: int) -> bool:
+    db = load_db()
+    if user_id not in db["admins"]:
+        db["admins"].append(user_id)
+        save_db(db)
+        return True
+    return False
+
+
+def remove_admin(user_id: int) -> bool:
+    db = load_db()
+    if user_id in db["admins"]:
+        db["admins"].remove(user_id)
+        save_db(db)
+        return True
+    return False
+
+
+def get_admins() -> List[int]:
+    return load_db()["admins"]
+
+
+def is_banned(user_id: int) -> bool:
+    return user_id in load_db()["banned"]
+
+
+def ban_user(user_id: int) -> bool:
+    db = load_db()
+    if user_id not in db["banned"]:
+        db["banned"].append(user_id)
+        if str(user_id) in db["users"]:
+            db["users"][str(user_id)]["is_banned"] = True
+        save_db(db)
+        return True
+    return False
+
+
+def unban_user(user_id: int) -> bool:
+    db = load_db()
+    if user_id in db["banned"]:
+        db["banned"].remove(user_id)
+        if str(user_id) in db["users"]:
+            db["users"][str(user_id)]["is_banned"] = False
+        save_db(db)
+        return True
+    return False
+
+
+def get_banned() -> List[int]:
+    return load_db()["banned"]
+
+
+def get_bot_status() -> bool:
+    return load_db().get("bot_enabled", True)
+
+
+def set_bot_status(enabled: bool) -> None:
+    db = load_db()
+    db["bot_enabled"] = enabled
+    save_db(db)
+
+
+def increment_decrypt(config_type: str = "unknown") -> None:
+    db = load_db()
+    db["stats"]["total_decrypts"] = db["stats"].get("total_decrypts", 0) + 1
+    by_type = db["stats"].setdefault("decrypts_by_type", {})
+    by_type[config_type] = by_type.get(config_type, 0) + 1
+    save_db(db)
+
+
+def get_all_users() -> Dict[str, Any]:
+    return load_db().get("users", {})
+
+
+def get_stats() -> Dict[str, Any]:
+    return load_db().get("stats", {})
